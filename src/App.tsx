@@ -25,7 +25,6 @@ function App() {
           <PomodoroPage
             state={state.pomodoro}
             onUpdate={(pomodoro) => setState((prev) => ({ ...prev, pomodoro }))}
-            accentColor={state.accentColor}
           />
         )}
         {activeTab === 'projects' && (

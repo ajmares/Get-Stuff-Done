@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Play, Pause, Square, SkipForward, Settings, GripVertical } from 'lucide-react'
-import { PomodoroState, PomodoroTask, PomodoroMode, AccentColor } from '@/lib/state'
+import { PomodoroState, PomodoroTask, PomodoroMode } from '@/lib/state'
 import { formatTime } from '@/lib/time'
 import { useInterval } from '@/hooks/useInterval'
 import Drawer from '@/components/Drawer'
@@ -9,11 +9,88 @@ import { motion } from 'framer-motion'
 interface PomodoroPageProps {
   state: PomodoroState
   onUpdate: (state: PomodoroState) => void
-  accentColor: AccentColor
 }
 
-export default function PomodoroPage({ state, onUpdate, accentColor }: PomodoroPageProps) {
+const modeLabels: Record<PomodoroMode, string> = {
+  work: 'Work',
+  shortBreak: 'Short Break',
+  longBreak: 'Long Break',
+}
+
+export default function PomodoroPage({ state, onUpdate }: PomodoroPageProps) {
   const [showSettings, setShowSettings] = useState(false)
+  const previousRemaining = useRef(state.remaining)
+  const audioContextRef = useRef<AudioContext | null>(null)
+
+  // Update tab title with countdown
+  useEffect(() => {
+    if (state.isRunning && state.remaining > 0) {
+      const timeString = formatTime(state.remaining)
+      const modeLabel = modeLabels[state.mode]
+      document.title = `${timeString} - ${modeLabel} | Get Stuff Done`
+    } else {
+      document.title = 'Get Stuff Done'
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.title = 'Get Stuff Done'
+    }
+  }, [state.remaining, state.isRunning, state.mode])
+
+  // Play sound when timer completes
+  useEffect(() => {
+    if (previousRemaining.current > 0 && state.remaining === 0 && state.isRunning) {
+      playCompletionSound()
+    }
+    previousRemaining.current = state.remaining
+  }, [state.remaining, state.isRunning])
+
+  const playCompletionSound = () => {
+    try {
+      // Create audio context if it doesn't exist
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      }
+
+      const audioContext = audioContextRef.current
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      // Create a pleasant beep sound
+      oscillator.frequency.value = 800 // Higher pitch
+      oscillator.type = 'sine'
+
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
+
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.5)
+
+      // Play a second beep after a short delay
+      setTimeout(() => {
+        const oscillator2 = audioContext.createOscillator()
+        const gainNode2 = audioContext.createGain()
+
+        oscillator2.connect(gainNode2)
+        gainNode2.connect(audioContext.destination)
+
+        oscillator2.frequency.value = 600
+        oscillator2.type = 'sine'
+
+        gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime)
+        gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
+
+        oscillator2.start(audioContext.currentTime)
+        oscillator2.stop(audioContext.currentTime + 0.5)
+      }, 200)
+    } catch (error) {
+      console.error('Error playing completion sound:', error)
+    }
+  }
 
   useInterval(
     () => {
@@ -104,12 +181,6 @@ export default function PomodoroPage({ state, onUpdate, accentColor }: PomodoroP
     onUpdate({ ...state, tasks })
   }
 
-  const modeLabels = {
-    work: 'Work',
-    shortBreak: 'Short Break',
-    longBreak: 'Long Break',
-  }
-
   return (
     <div className="space-y-8">
       {/* Timer */}
@@ -166,7 +237,6 @@ export default function PomodoroPage({ state, onUpdate, accentColor }: PomodoroP
         onTaskDelete={handleTaskDelete}
         onTaskAdd={handleTaskAdd}
         onTaskReorder={handleTaskReorder}
-        accentColor={accentColor}
       />
 
       {showSettings && (
@@ -193,7 +263,6 @@ function TaskList({
   onTaskDelete,
   onTaskAdd,
   onTaskReorder,
-  accentColor,
 }: {
   tasks: PomodoroTask[]
   currentTaskId: string | null
@@ -202,45 +271,11 @@ function TaskList({
   onTaskDelete: (id: string) => void
   onTaskAdd: (title: string) => void
   onTaskReorder: (tasks: PomodoroTask[]) => void
-  accentColor: AccentColor
 }) {
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingNotes, setEditingNotes] = useState<string>('')
   const [draggedTask, setDraggedTask] = useState<PomodoroTask | null>(null)
-
-  const accentClasses = {
-    indigo: {
-      text: 'text-indigo-400',
-      bg: 'bg-indigo-500/20',
-      border: 'border-indigo-500/40',
-      bgSelected: 'bg-indigo-500/20',
-      borderSelected: 'border-indigo-500/40',
-    },
-    blue: {
-      text: 'text-blue-400',
-      bg: 'bg-blue-500/20',
-      border: 'border-blue-500/40',
-      bgSelected: 'bg-blue-500/20',
-      borderSelected: 'border-blue-500/40',
-    },
-    purple: {
-      text: 'text-purple-400',
-      bg: 'bg-purple-500/20',
-      border: 'border-purple-500/40',
-      bgSelected: 'bg-purple-500/20',
-      borderSelected: 'border-purple-500/40',
-    },
-    fuchsia: {
-      text: 'text-fuchsia-400',
-      bg: 'bg-fuchsia-500/20',
-      border: 'border-fuchsia-500/40',
-      bgSelected: 'bg-fuchsia-500/20',
-      borderSelected: 'border-fuchsia-500/40',
-    },
-  }
-
-  const accent = accentClasses[accentColor]
 
   const sortedTasks = [...tasks].sort((a, b) => a.order - b.order)
 
@@ -335,11 +370,11 @@ function TaskList({
               onClick={() => handleTaskClick(task)}
               className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition-all ${
                 isSelected
-                  ? `${accent.borderSelected} ${accent.bgSelected} shadow-lg shadow-black/30`
+                  ? 'border-blue-500/40 bg-blue-500/20 shadow-lg shadow-black/30'
                   : 'border-neutral-700 bg-neutral-800 hover:shadow-lg hover:shadow-black/30'
               }`}
             >
-              <GripVertical className={`h-5 w-5 flex-shrink-0 ${isSelected ? accent.text : 'text-neutral-500'}`} />
+              <GripVertical className={`h-5 w-5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-neutral-500'}`} />
               <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-2">
                   <input
