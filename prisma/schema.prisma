@@ -1,0 +1,135 @@
+// Focus Tool Data Models
+// Clean, keyboard-first productivity system
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Core Entities
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  status      String   @default("active") // active, completed, archived
+  priority    String   @default("P2") // P0, P1, P2, P3
+  scoreRice   Float?   // RICE score
+  owner       String?
+  goal        String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  tasks       Task[]
+  focusBlocks FocusBlock[]
+  
+  @@map("projects")
+}
+
+model Task {
+  id              String    @id @default(cuid())
+  projectId       String?
+  title           String
+  description     String?
+  status          TaskStatus @default(INBOX)
+  priority        Priority  @default(P2)
+  effort          Effort    @default(M)
+  impact          Int       @default(3) // 1-5 scale
+  dueDate         DateTime?
+  scheduledFor    DateTime?
+  recurringRule   String?
+  labels          String?    @default("[]") // JSON array as string
+  blockedBy       String?    @default("[]") // JSON array as string
+  isMustDo        Boolean   @default(false)
+  isFocusCandidate Boolean  @default(false)
+  riceScore       Float?
+  lastTouchedAt   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  project         Project?  @relation(fields: [projectId], references: [id])
+  focusBlocks     FocusBlock[]
+  
+  @@map("tasks")
+}
+
+model FocusBlock {
+  id          String    @id @default(cuid())
+  taskId      String?
+  projectId   String?
+  title       String
+  date        DateTime
+  start       String    // "09:00"
+  end         String    // "11:00"
+  location    String?
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  task        Task?     @relation(fields: [taskId], references: [id])
+  project     Project?  @relation(fields: [projectId], references: [id])
+  
+  @@map("focus_blocks")
+}
+
+model WeeklyFocus {
+  id                    String   @id @default(cuid())
+  weekStartISO          String   @unique // "2024-W42"
+  themes                String?  @default("[]") // JSON array as string
+  targets               String?  @default("[]") // JSON array as string
+  committedMustDosPerDay Int    @default(3)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("weekly_focus")
+}
+
+model Routine {
+  id           String   @id @default(cuid())
+  name         String
+  cadence      Cadence  @default(DAILY)
+  checklist    String?  @default("[]") // JSON array as string
+  reminderTime String?  // "09:00"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("routines")
+}
+
+// Enums
+enum TaskStatus {
+  INBOX
+  PLANNED
+  SCHEDULED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum Priority {
+  P0
+  P1
+  P2
+  P3
+}
+
+enum Effort {
+  XS  // 15m
+  S   // 30m
+  M   // 60m
+  L   // 2h
+  XL  // 4h+
+}
+
+enum Cadence {
+  DAILY
+  WEEKLY
+  MONTHLY
+}

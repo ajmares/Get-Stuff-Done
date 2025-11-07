@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/focus-blocks/route": "app/api/focus-blocks/route.js",
+  "/api/projects/route": "app/api/projects/route.js",
+  "/api/tasks/[id]/route": "app/api/tasks/[id]/route.js",
+  "/api/tasks/route": "app/api/tasks/route.js",
+  "/api/weekly-focus/route": "app/api/weekly-focus/route.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js"
+}

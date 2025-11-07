@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/pages", "src/components/Header.tsx", "src/components/Drawer.tsx", "src/components/ConfirmDialog.tsx", "src/hooks", "src/lib/state.ts", "src/lib/time.ts", "src/App.tsx", "src/main.tsx", "src/index.css"],
+  "exclude": ["node_modules", "src/app", "src/components/TodayView.tsx", "src/components/ProjectsView.tsx", "src/components/ProjectCard.tsx", "src/components/WeekView.tsx", "src/components/WeeklyReview.tsx", "src/components/WeeklyFocusCard.tsx", "src/components/FocusBlockCard.tsx", "src/components/FocusBlockCreator.tsx", "src/components/RICEInsights.tsx", "src/components/ui", "src/lib/riceScoring.ts", "src/lib/quickAddParser.ts", "src/lib/prisma.ts", "src/lib/utils.ts"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
