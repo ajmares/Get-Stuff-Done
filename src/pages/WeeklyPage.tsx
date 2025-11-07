@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { ProjectsState, WeeklyState, Project, AccentColor } from '@/lib/state'
+import { ChevronLeft, ChevronRight, ExternalLink, GripVertical, X } from 'lucide-react'
+import { ProjectsState, WeeklyState, Project, AccentColor, ProjectChecklistItem, ProjectPriority } from '@/lib/state'
 import { getWeekISO, formatWeekRange, navigateWeek } from '@/lib/time'
 import Drawer from '@/components/Drawer'
 import { motion } from 'framer-motion'
@@ -9,6 +9,7 @@ interface WeeklyPageProps {
   projectsState: ProjectsState
   weeklyState: WeeklyState
   onWeeklyUpdate: (weekly: WeeklyState) => void
+  onProjectsUpdate: (projects: ProjectsState) => void
   accentColor: AccentColor
 }
 
@@ -39,6 +40,7 @@ export default function WeeklyPage({
   projectsState,
   weeklyState,
   onWeeklyUpdate,
+  onProjectsUpdate,
   accentColor,
 }: WeeklyPageProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -84,7 +86,17 @@ export default function WeeklyPage({
     .filter((p): p is Project => p !== undefined)
 
   const availableProjects = projectsState.projects.filter(
-    (p) => !weekData.big3ProjectIds.includes(p.id),
+    (p) => {
+      // Exclude projects already in Big 3
+      if (weekData.big3ProjectIds.includes(p.id)) return false
+      // Exclude projects in "Done" column
+      const column = projectsState.columns.find((c) => c.id === p.columnId)
+      if (column) {
+        const columnName = column.title.toLowerCase()
+        if (columnName.includes('done') || columnName.includes('complete')) return false
+      }
+      return true
+    },
   )
 
   const getProjectProgress = (project: Project) => {
@@ -148,7 +160,7 @@ export default function WeeklyPage({
                 </button>
               </div>
 
-              {progress && (
+              {progress ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-neutral-400">Progress</span>
@@ -158,13 +170,30 @@ export default function WeeklyPage({
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-neutral-800">
                     <motion.div
+                      key={`${project.id}-${progress.checked}-${progress.total}`}
                       initial={{ width: 0 }}
                       animate={{ width: `${progress.percentage}%` }}
-                      transition={{ duration: 0.5 }}
+                      transition={{ duration: 0.3 }}
                       className={`h-full ${
-                        progress.percentage === 100 ? 'bg-green-500' : accent.text.replace('text-', 'bg-')
+                        progress.percentage === 100
+                          ? 'bg-green-500'
+                          : progress.percentage >= 50
+                            ? 'bg-blue-500'
+                            : progress.percentage > 0
+                              ? 'bg-yellow-500'
+                              : 'bg-neutral-700'
                       }`}
                     />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-400">Progress</span>
+                    <span className="font-medium text-neutral-500">No tasks</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-neutral-800">
+                    <div className="h-full w-0 bg-neutral-700" />
                   </div>
                 </div>
               )}
@@ -217,7 +246,35 @@ export default function WeeklyPage({
       {selectedProject && (
         <ProjectDrawer
           project={selectedProject}
-          projectsState={projectsState}
+          onUpdate={(updatedProject) => {
+            // Update the project in the projects state
+            const updatedProjects = projectsState.projects.map((p) =>
+              p.id === updatedProject.id ? updatedProject : p,
+            )
+            onProjectsUpdate({
+              ...projectsState,
+              projects: updatedProjects,
+            })
+            // Update local selected project to reflect changes
+            setSelectedProject(updatedProject)
+          }}
+          onDelete={() => {
+            // Remove from projects and weekly if deleted
+            const updatedProjects = projectsState.projects.filter((p) => p.id !== selectedProject.id)
+            const updatedWeekly = {
+              ...weeklyState,
+              [currentWeekISO]: {
+                big3ProjectIds: weekData.big3ProjectIds.filter((id) => id !== selectedProject.id),
+                updatedAt: Date.now(),
+              },
+            }
+            onProjectsUpdate({
+              ...projectsState,
+              projects: updatedProjects,
+            })
+            onWeeklyUpdate(updatedWeekly)
+            setSelectedProject(null)
+          }}
           onClose={() => setSelectedProject(null)}
           accentColor={accentColor}
         />
@@ -228,95 +285,232 @@ export default function WeeklyPage({
 
 function ProjectDrawer({
   project,
-  projectsState,
+  onUpdate,
+  onDelete,
   onClose,
   accentColor,
 }: {
   project: Project
-  projectsState: ProjectsState
+  onUpdate: (project: Project) => void
+  onDelete: () => void
   onClose: () => void
   accentColor: AccentColor
 }) {
-  const column = projectsState.columns.find((c) => c.id === project.columnId)?.title || 'Unknown'
-  const progress = project.checklist.length > 0
-    ? {
-        checked: project.checklist.filter((item) => item.checked).length,
-        total: project.checklist.length,
+  const [title, setTitle] = useState(project.title)
+  const [description, setDescription] = useState(project.description)
+  const [checklist, setChecklist] = useState(project.checklist)
+  const [tags, setTags] = useState(project.tags.join(', '))
+  const [priority, setPriority] = useState<ProjectPriority>(project.priority)
+  const [newChecklistItem, setNewChecklistItem] = useState('')
+  const [draggedItem, setDraggedItem] = useState<string | null>(null)
+
+  const handleSave = () => {
+    onUpdate({
+      ...project,
+      title,
+      description,
+      checklist,
+      tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+      priority,
+      updatedAt: Date.now(),
+    })
+  }
+
+  const handleAddChecklistItem = () => {
+    if (newChecklistItem.trim()) {
+      const newItem: ProjectChecklistItem = {
+        id: `item-${Date.now()}`,
+        text: newChecklistItem.trim(),
+        checked: false,
       }
-    : null
+      const updatedChecklist = [...checklist, newItem]
+      setChecklist(updatedChecklist)
+      setNewChecklistItem('')
+      // Save immediately
+      onUpdate({
+        ...project,
+        checklist: updatedChecklist,
+        updatedAt: Date.now(),
+      })
+    }
+  }
+
+  const handleDeleteChecklistItem = (id: string) => {
+    const updatedChecklist = checklist.filter((item) => item.id !== id)
+    setChecklist(updatedChecklist)
+    // Save immediately
+    onUpdate({
+      ...project,
+      checklist: updatedChecklist,
+      updatedAt: Date.now(),
+    })
+  }
+
+  const handleToggleChecklistItem = (id: string) => {
+    const updatedChecklist = checklist.map((item) =>
+      item.id === id ? { ...item, checked: !item.checked } : item,
+    )
+    setChecklist(updatedChecklist)
+    // Save immediately
+    onUpdate({
+      ...project,
+      checklist: updatedChecklist,
+      updatedAt: Date.now(),
+    })
+  }
+
+  const handleDragStart = (e: React.DragEvent, itemId: string) => {
+    setDraggedItem(itemId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    if (!draggedItem || draggedItem === targetId) return
+
+    const draggedIndex = checklist.findIndex((item) => item.id === draggedItem)
+    const targetIndex = checklist.findIndex((item) => item.id === targetId)
+
+    const newChecklist = [...checklist]
+    const [removed] = newChecklist.splice(draggedIndex, 1)
+    newChecklist.splice(targetIndex, 0, removed)
+
+    setChecklist(newChecklist)
+    setDraggedItem(null)
+    // Save immediately after reordering
+    onUpdate({
+      ...project,
+      checklist: newChecklist,
+      updatedAt: Date.now(),
+    })
+  }
+
+  // Save on drawer close
+  const handleClose = () => {
+    handleSave()
+    onClose()
+  }
 
   return (
-    <Drawer title="Project Details" onClose={onClose} accentColor={accentColor}>
+    <Drawer title="Project Details" onClose={handleClose} accentColor={accentColor}>
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold">{project.title}</h2>
-          <p className="mt-1 text-sm text-neutral-400">Column: {column}</p>
+          <label className="mb-2 block text-sm font-medium">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={handleSave}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 focus:border-indigo-500 focus:outline-none"
+          />
         </div>
 
-        {project.description && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium">Description</h3>
-            <p className="text-sm text-neutral-300 whitespace-pre-wrap">{project.description}</p>
-          </div>
-        )}
-
-        {project.checklist.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium">
-              Checklist {progress && `(${progress.checked}/${progress.total})`}
-            </h3>
-            <div className="space-y-2">
-              {project.checklist.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 p-2 ${
-                    item.checked ? 'opacity-60' : ''
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    readOnly
-                    className="h-4 w-4 rounded"
-                  />
-                  <span className={item.checked ? 'line-through text-neutral-400' : ''}>
-                    {item.text}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {project.tags.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium">Tags</h3>
-            <div className="flex flex-wrap gap-2">
-              {project.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        <div>
+          <label className="mb-2 block text-sm font-medium">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={handleSave}
+            rows={6}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 focus:border-indigo-500 focus:outline-none"
+            placeholder="Add project description..."
+          />
+        </div>
 
         <div>
-          <h3 className="mb-2 text-sm font-medium">Priority</h3>
-          <span
-            className={`rounded-lg px-3 py-1 text-xs font-medium ${
-              project.priority === 'High'
-                ? 'bg-red-600/20 text-red-400'
-                : project.priority === 'Med'
-                  ? 'bg-yellow-600/20 text-yellow-400'
-                  : 'bg-neutral-600/20 text-neutral-400'
-            }`}
+          <label className="mb-2 block text-sm font-medium">Checklist</label>
+          <div className="space-y-2">
+            {checklist.map((item) => (
+              <div
+                key={item.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, item.id)}
+                className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 p-2"
+              >
+                <GripVertical className="h-4 w-4 cursor-move text-neutral-500" />
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  onChange={() => handleToggleChecklistItem(item.id)}
+                  className="h-4 w-4 rounded"
+                />
+                <span className={item.checked ? 'flex-1 text-neutral-400 line-through' : 'flex-1'}>
+                  {item.text}
+                </span>
+                <button
+                  onClick={() => handleDeleteChecklistItem(item.id)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newChecklistItem}
+                onChange={(e) => setNewChecklistItem(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddChecklistItem()}
+                placeholder="Add checklist item..."
+                className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              />
+              <button
+                onClick={handleAddChecklistItem}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Tags (comma-separated)</label>
+          <input
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            onBlur={handleSave}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 focus:border-indigo-500 focus:outline-none"
+            placeholder="tag1, tag2, tag3"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Priority</label>
+          <select
+            value={priority}
+            onChange={(e) => {
+              const newPriority = e.target.value as ProjectPriority
+              setPriority(newPriority)
+              // Save immediately
+              onUpdate({
+                ...project,
+                priority: newPriority,
+                updatedAt: Date.now(),
+              })
+            }}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 focus:border-indigo-500 focus:outline-none"
           >
-            {project.priority}
-          </span>
+            <option value="Low">Low</option>
+            <option value="Med">Med</option>
+            <option value="High">High</option>
+          </select>
+        </div>
+
+        <div className="flex gap-3 pt-4">
+          <button
+            onClick={onDelete}
+            className="flex-1 rounded-lg border border-red-700 bg-red-900/20 px-4 py-2 text-sm text-red-400 transition-all hover:bg-red-900/30"
+          >
+            Delete Project
+          </button>
         </div>
       </div>
     </Drawer>

@@ -197,13 +197,25 @@ export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsP
             .filter((p) => p.columnId === column.id)
             .sort((a, b) => a.order - b.order)
 
+          // Column-specific colors
+          const getColumnColor = (columnId: string) => {
+            const id = columnId.toLowerCase()
+            if (id.includes('backlog')) return 'bg-blue-950/30 border-blue-800/30'
+            if (id.includes('progress') || id.includes('in-progress')) return 'bg-yellow-950/30 border-yellow-800/30'
+            if (id.includes('done') || id.includes('complete')) return 'bg-green-950/30 border-green-800/30'
+            if (id.includes('blocked')) return 'bg-red-950/30 border-red-800/30'
+            return 'bg-neutral-900 border-neutral-800'
+          }
+
+          const columnColor = getColumnColor(column.id)
+
           return (
             <div
               key={column.id}
-              className={`flex min-w-[300px] flex-col rounded-2xl border bg-neutral-900 p-4 transition-all ${
+              className={`flex min-w-[300px] flex-col rounded-2xl border p-4 transition-all ${columnColor} ${
                 draggedOverColumn === column.id
                   ? `${accent.border} ${accent.bg} border-2`
-                  : 'border-neutral-800'
+                  : ''
               }`}
               onDragOver={(e) => handleDragOver(e, column.id)}
               onDragLeave={handleDragLeave}
@@ -343,9 +355,9 @@ function ProjectCard({
 }) {
   const accent = accentClasses[accentColor]
   const priorityColors = {
-    Low: 'bg-neutral-600',
-    Med: 'bg-yellow-600',
-    High: 'bg-red-600',
+    Low: 'bg-blue-500',
+    Med: 'bg-orange-500',
+    High: 'bg-red-500',
   }
 
   return (
@@ -354,9 +366,7 @@ function ProjectCard({
       onDragStart={onDragStart as any}
       onClick={onClick}
       whileHover={{ scale: 1.02, y: -2 }}
-      className={`cursor-pointer rounded-2xl border bg-neutral-800 p-4 transition-all hover:shadow-lg hover:shadow-black/30 ${
-        project.priority === 'High' ? 'border-red-500/40' : 'border-neutral-700'
-      }`}
+      className="cursor-pointer rounded-2xl border border-neutral-700/50 bg-neutral-800 p-4 transition-all hover:shadow-lg hover:shadow-black/30"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
@@ -430,19 +440,40 @@ function ProjectDrawer({
         text: newChecklistItem.trim(),
         checked: false,
       }
-      setChecklist([...checklist, newItem])
+      const updatedChecklist = [...checklist, newItem]
+      setChecklist(updatedChecklist)
       setNewChecklistItem('')
+      // Save immediately
+      onUpdate({
+        ...project,
+        checklist: updatedChecklist,
+        updatedAt: Date.now(),
+      })
     }
   }
 
   const handleDeleteChecklistItem = (id: string) => {
-    setChecklist(checklist.filter((item) => item.id !== id))
+    const updatedChecklist = checklist.filter((item) => item.id !== id)
+    setChecklist(updatedChecklist)
+    // Save immediately
+    onUpdate({
+      ...project,
+      checklist: updatedChecklist,
+      updatedAt: Date.now(),
+    })
   }
 
   const handleToggleChecklistItem = (id: string) => {
-    setChecklist(
-      checklist.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)),
+    const updatedChecklist = checklist.map((item) =>
+      item.id === id ? { ...item, checked: !item.checked } : item,
     )
+    setChecklist(updatedChecklist)
+    // Save immediately
+    onUpdate({
+      ...project,
+      checklist: updatedChecklist,
+      updatedAt: Date.now(),
+    })
   }
 
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
@@ -467,10 +498,22 @@ function ProjectDrawer({
 
     setChecklist(newChecklist)
     setDraggedItem(null)
+    // Save immediately after reordering
+    onUpdate({
+      ...project,
+      checklist: newChecklist,
+      updatedAt: Date.now(),
+    })
+  }
+
+  // Save on drawer close
+  const handleClose = () => {
+    handleSave()
+    onClose()
   }
 
   return (
-    <Drawer title="Project Details" onClose={onClose} accentColor={accentColor}>
+    <Drawer title="Project Details" onClose={handleClose} accentColor={accentColor}>
       <div className="space-y-6">
         <div>
           <label className="mb-2 block text-sm font-medium">Title</label>
@@ -561,8 +604,14 @@ function ProjectDrawer({
           <select
             value={priority}
             onChange={(e) => {
-              setPriority(e.target.value as ProjectPriority)
-              handleSave()
+              const newPriority = e.target.value as ProjectPriority
+              setPriority(newPriority)
+              // Save immediately
+              onUpdate({
+                ...project,
+                priority: newPriority,
+                updatedAt: Date.now(),
+              })
             }}
             className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 focus:border-indigo-500 focus:outline-none"
           >

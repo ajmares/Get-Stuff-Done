@@ -20,7 +20,7 @@ function App() {
         accentColor={state.accentColor}
         onAccentChange={(color) => setState((prev) => ({ ...prev, accentColor: color }))}
       />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className={`mx-auto px-4 py-8 ${activeTab === 'projects' ? 'max-w-7xl' : 'max-w-4xl'}`}>
         {activeTab === 'pomodoro' && (
           <PomodoroPage
             state={state.pomodoro}
@@ -40,6 +40,7 @@ function App() {
             projectsState={state.projects}
             weeklyState={state.weekly}
             onWeeklyUpdate={(weekly) => setState((prev) => ({ ...prev, weekly }))}
+            onProjectsUpdate={(projects) => setState((prev) => ({ ...prev, projects }))}
             accentColor={state.accentColor}
           />
         )}
