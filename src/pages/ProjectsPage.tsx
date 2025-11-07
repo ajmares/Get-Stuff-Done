@@ -69,9 +69,16 @@ export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsP
 
     // If dropping on another project in the same column, reorder within column
     if (targetProject && draggedProject.columnId === targetColumnId && draggedProject.id !== targetProject.id) {
+      const priorityOrder = { High: 0, Med: 1, Low: 2 }
       const columnProjects = state.projects
         .filter((p) => p.columnId === targetColumnId)
-        .sort((a, b) => a.order - b.order)
+        .sort((a, b) => {
+          // Sort by priority first (High > Med > Low)
+          const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
+          if (priorityDiff !== 0) return priorityDiff
+          // Then by order
+          return a.order - b.order
+        })
 
       const draggedIndex = columnProjects.findIndex((p) => p.id === draggedProject.id)
       const targetIndex = columnProjects.findIndex((p) => p.id === targetProject.id)
@@ -230,9 +237,16 @@ export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsP
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {sortedColumns.map((column) => {
+          const priorityOrder = { High: 0, Med: 1, Low: 2 }
           const columnProjects = state.projects
             .filter((p) => p.columnId === column.id)
-            .sort((a, b) => a.order - b.order)
+            .sort((a, b) => {
+              // Sort by priority first (High > Med > Low)
+              const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
+              if (priorityDiff !== 0) return priorityDiff
+              // Then by order
+              return a.order - b.order
+            })
 
           // Column-specific colors
           const getColumnColor = (columnId: string) => {
