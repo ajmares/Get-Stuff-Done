@@ -49,8 +49,28 @@ export default function WeeklyPage({
   const weekData = weeklyState[currentWeekISO] || { big3ProjectIds: [], updatedAt: Date.now() }
   const accent = accentClasses[accentColor]
 
+  // Calculate valid Big 3 projects (filter out orphaned IDs)
+  const big3Projects = weekData.big3ProjectIds
+    .map((id) => projectsState.projects.find((p) => p.id === id))
+    .filter((p): p is Project => p !== undefined)
+
+  const validBig3Ids = big3Projects.map((p) => p.id)
+
+  // Clean up orphaned project IDs (projects that no longer exist)
+  if (weekData.big3ProjectIds.length !== validBig3Ids.length) {
+    // Auto-cleanup orphaned IDs
+    onWeeklyUpdate({
+      ...weeklyState,
+      [currentWeekISO]: {
+        big3ProjectIds: validBig3Ids,
+        updatedAt: Date.now(),
+      },
+    })
+  }
+
   const handleProjectToggle = (projectId: string) => {
-    const currentIds = weekData.big3ProjectIds
+    // Use valid project IDs only (filter out orphaned IDs)
+    const currentIds = validBig3Ids
     const isSelected = currentIds.includes(projectId)
 
     let newIds: string[]
@@ -81,14 +101,10 @@ export default function WeeklyPage({
     setCurrentDate(navigateWeek(currentDate, 'next'))
   }
 
-  const big3Projects = weekData.big3ProjectIds
-    .map((id) => projectsState.projects.find((p) => p.id === id))
-    .filter((p): p is Project => p !== undefined)
-
   const availableProjects = projectsState.projects.filter(
     (p) => {
       // Exclude projects already in Big 3
-      if (weekData.big3ProjectIds.includes(p.id)) return false
+      if (validBig3Ids.includes(p.id)) return false
       // Exclude projects in "Done" column
       const column = projectsState.columns.find((c) => c.id === p.columnId)
       if (column) {
