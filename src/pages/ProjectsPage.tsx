@@ -37,6 +37,7 @@ const accentClasses = {
 export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsPageProps) {
   const [draggedProject, setDraggedProject] = useState<Project | null>(null)
   const [draggedOverColumn, setDraggedOverColumn] = useState<string | null>(null)
+  const [draggedOverProject, setDraggedOverProject] = useState<Project | null>(null)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showDeleteColumn, setShowDeleteColumn] = useState<Column | null>(null)
   const [showDeleteProject, setShowDeleteProject] = useState<Project | null>(null)
@@ -59,39 +60,75 @@ export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsP
     setDraggedOverColumn(null)
   }
 
-  const handleDrop = (e: React.DragEvent, targetColumnId: string) => {
+  const handleDrop = (e: React.DragEvent, targetColumnId: string, targetProject?: Project) => {
     e.preventDefault()
     if (!draggedProject) return
 
     const targetColumn = state.columns.find((c) => c.id === targetColumnId)
     if (!targetColumn) return
 
-    // Remove from old column
-    const updatedColumns = state.columns.map((col) => {
-      if (col.id === draggedProject.columnId) {
-        return { ...col, projectIds: col.projectIds.filter((id) => id !== draggedProject.id) }
-      }
-      if (col.id === targetColumnId) {
-        return { ...col, projectIds: [...col.projectIds, draggedProject.id] }
-      }
-      return col
-    })
+    // If dropping on another project in the same column, reorder within column
+    if (targetProject && draggedProject.columnId === targetColumnId && draggedProject.id !== targetProject.id) {
+      const columnProjects = state.projects
+        .filter((p) => p.columnId === targetColumnId)
+        .sort((a, b) => a.order - b.order)
 
-    // Update project
-    const updatedProjects = state.projects.map((p) =>
-      p.id === draggedProject.id
-        ? { ...p, columnId: targetColumnId, order: targetColumn.projectIds.length }
-        : p,
-    )
+      const draggedIndex = columnProjects.findIndex((p) => p.id === draggedProject.id)
+      const targetIndex = columnProjects.findIndex((p) => p.id === targetProject.id)
 
-    onUpdate({
-      ...state,
-      columns: updatedColumns,
-      projects: updatedProjects,
-    })
+      const reorderedProjects = [...columnProjects]
+      const [removed] = reorderedProjects.splice(draggedIndex, 1)
+      reorderedProjects.splice(targetIndex, 0, removed)
+
+      // Update order values
+      const updatedProjects = state.projects.map((p) => {
+        const reorderedProject = reorderedProjects.find((rp) => rp.id === p.id)
+        if (reorderedProject) {
+          return { ...p, order: reorderedProjects.indexOf(reorderedProject) }
+        }
+        return p
+      })
+
+      // Update column projectIds order
+      const updatedColumn = {
+        ...targetColumn,
+        projectIds: reorderedProjects.map((p) => p.id),
+      }
+
+      onUpdate({
+        ...state,
+        columns: state.columns.map((c) => (c.id === targetColumnId ? updatedColumn : c)),
+        projects: updatedProjects,
+      })
+    } else {
+      // Moving to different column (existing functionality)
+      const updatedColumns = state.columns.map((col) => {
+        if (col.id === draggedProject.columnId) {
+          return { ...col, projectIds: col.projectIds.filter((id) => id !== draggedProject.id) }
+        }
+        if (col.id === targetColumnId) {
+          return { ...col, projectIds: [...col.projectIds, draggedProject.id] }
+        }
+        return col
+      })
+
+      // Update project
+      const updatedProjects = state.projects.map((p) =>
+        p.id === draggedProject.id
+          ? { ...p, columnId: targetColumnId, order: targetColumn.projectIds.length }
+          : p,
+      )
+
+      onUpdate({
+        ...state,
+        columns: updatedColumns,
+        projects: updatedProjects,
+      })
+    }
 
     setDraggedProject(null)
     setDraggedOverColumn(null)
+    setDraggedOverProject(null)
   }
 
   const handleAddColumn = () => {
@@ -233,8 +270,22 @@ export default function ProjectsPage({ state, onUpdate, accentColor }: ProjectsP
                     project={project}
                     progress={getProjectProgress(project)}
                     onDragStart={(e) => handleDragStart(e, project)}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setDraggedOverProject(project)
+                    }}
+                    onDragLeave={() => {
+                      setDraggedOverProject(null)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleDrop(e, column.id, project)
+                    }}
                     onClick={() => setSelectedProject(project)}
                     accentColor={accentColor}
+                    isDraggedOver={draggedOverProject?.id === project.id && draggedProject?.id !== project.id}
                   />
                 ))}
                 <button
@@ -344,14 +395,22 @@ function ProjectCard({
   project,
   progress,
   onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
   onClick,
   accentColor,
+  isDraggedOver,
 }: {
   project: Project
   progress: string | null
   onDragStart: (e: React.DragEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
   onClick: () => void
   accentColor: AccentColor
+  isDraggedOver?: boolean
 }) {
   const accent = accentClasses[accentColor]
   const priorityColors = {
@@ -364,9 +423,16 @@ function ProjectCard({
     <motion.div
       draggable
       onDragStart={onDragStart as any}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       onClick={onClick}
       whileHover={{ scale: 1.02, y: -2 }}
-      className="cursor-pointer rounded-2xl border border-neutral-700/50 bg-neutral-800 p-4 transition-all hover:shadow-lg hover:shadow-black/30"
+      className={`cursor-pointer rounded-2xl border p-4 transition-all hover:shadow-lg hover:shadow-black/30 ${
+        isDraggedOver
+          ? 'border-blue-500/50 bg-blue-900/20'
+          : 'border-neutral-700/50 bg-neutral-800'
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
