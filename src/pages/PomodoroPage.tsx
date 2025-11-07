@@ -153,8 +153,27 @@ export default function PomodoroPage({ state, onUpdate }: PomodoroPageProps) {
   }
 
   const handleTaskUpdate = (task: PomodoroTask) => {
-    const tasks = state.tasks.map((t) => (t.id === task.id ? task : t))
-    onUpdate({ ...state, tasks })
+    let updatedTasks = state.tasks.map((t) => (t.id === task.id ? task : t))
+    
+    // Check if completion status changed
+    const previousTask = state.tasks.find((t) => t.id === task.id)
+    const completionChanged = previousTask && previousTask.completed !== task.completed
+    
+    if (completionChanged) {
+      // Separate completed and incomplete tasks
+      const incompleteTasks = updatedTasks.filter((t) => !t.completed)
+      const completedTasks = updatedTasks.filter((t) => t.completed)
+      
+      // Reorder: incomplete first, then completed
+      const reorderedTasks = [
+        ...incompleteTasks.map((t, index) => ({ ...t, order: index })),
+        ...completedTasks.map((t, index) => ({ ...t, order: incompleteTasks.length + index })),
+      ]
+      
+      updatedTasks = reorderedTasks
+    }
+    
+    onUpdate({ ...state, tasks: updatedTasks })
   }
 
   const handleTaskDelete = (taskId: string) => {
@@ -164,17 +183,18 @@ export default function PomodoroPage({ state, onUpdate }: PomodoroPageProps) {
   }
 
   const handleTaskAdd = (title: string) => {
-    const maxOrder = state.tasks.length > 0 ? Math.max(...state.tasks.map((t) => t.order)) : -1
+    // Shift all existing tasks down by 1, add new task at top (order 0)
+    const shiftedTasks = state.tasks.map((t) => ({ ...t, order: t.order + 1 }))
     const newTask: PomodoroTask = {
       id: Date.now().toString(),
       title,
       notes: '',
       completed: false,
-      order: maxOrder + 1,
+      order: 0, // New tasks go to the top
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }
-    onUpdate({ ...state, tasks: [...state.tasks, newTask] })
+    onUpdate({ ...state, tasks: [newTask, ...shiftedTasks] })
   }
 
   const handleTaskReorder = (tasks: PomodoroTask[]) => {
