@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, GripVertical, X } from 'lucide-react'
 import { ProjectsState, WeeklyState, Project, AccentColor, ProjectChecklistItem, ProjectPriority } from '@/lib/state'
 import { getWeekISO, formatWeekRange, navigateWeek } from '@/lib/time'
@@ -169,7 +169,13 @@ export default function WeeklyPage({
                   <p className="mt-1 text-xs text-neutral-400">{column}</p>
                 </div>
                 <button
-                  onClick={() => setSelectedProject(project)}
+                  onClick={() => {
+                    // Always get the latest project data from projectsState
+                    const latestProject = projectsState.projects.find((p) => p.id === project.id)
+                    if (latestProject) {
+                      setSelectedProject(latestProject)
+                    }
+                  }}
                   className="rounded-lg p-1 text-neutral-400 transition-all hover:bg-neutral-800 hover:text-neutral-100"
                 >
                   <ExternalLink className="h-4 w-4" />
@@ -319,6 +325,15 @@ function ProjectDrawer({
   const [priority, setPriority] = useState<ProjectPriority>(project.priority)
   const [newChecklistItem, setNewChecklistItem] = useState('')
   const [draggedItem, setDraggedItem] = useState<string | null>(null)
+
+  // Update local state when project prop changes (e.g., when updated from parent)
+  useEffect(() => {
+    setTitle(project.title)
+    setDescription(project.description)
+    setChecklist(project.checklist)
+    setTags(project.tags.join(', '))
+    setPriority(project.priority)
+  }, [project.id, project.title, project.description, project.checklist, project.tags, project.priority])
 
   const handleSave = () => {
     onUpdate({
